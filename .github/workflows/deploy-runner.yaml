@@ -1,0 +1,86 @@
+name: Deploy EC2 Runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - "versions.env"
+      - ".github/workflows/deploy-runner.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC
+
+jobs:
+  deploy:
+    name: Provision EC2 runner
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load versions
+        run: |
+          set -a && source versions.env && set +a
+          echo "RUNNER_VERSION=${RUNNER_VERSION}" >> "$GITHUB_ENV"
+          echo "INSTANCE_TYPE=${INSTANCE_TYPE}" >> "$GITHUB_ENV"
+
+      - name: Authenticate to AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Generate GitHub runner registration token
+        id: runner-token
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          TOKEN=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            /orgs/${{ secrets.GITHUB_OWNER }}/actions/runners/registration-token \
+            --jq '.token')
+          echo "token=${TOKEN}" >> "$GITHUB_OUTPUT"
+
+      - name: Store registration token in SSM
+        run: |
+          aws ssm put-parameter \
+            --name "/github-runner/token" \
+            --value "${{ steps.runner-token.outputs.token }}" \
+            --type SecureString \
+            --overwrite \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Terminate existing runner instance (if any)
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=github-ec2-runner" \
+              "Name=instance-state-name,Values=running,stopped" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+
+          if [ "$INSTANCE_ID" != "None" ] && [ -n "$INSTANCE_ID" ]; then
+            echo "Terminating existing instance: $INSTANCE_ID"
+            aws ec2 terminate-instances --instance-ids "$INSTANCE_ID"
+            aws ec2 wait instance-terminated --instance-ids "$INSTANCE_ID"
+          else
+            echo "No existing instance found."
+          fi
+
+      - name: Launch EC2 runner instance
+        run: |
+          aws ec2 run-instances \
+            --image-id ${{ secrets.EC2_AMI_ID }} \
+            --instance-type "$INSTANCE_TYPE" \
+            --subnet-id ${{ secrets.EC2_SUBNET_ID }} \
+            --security-group-ids ${{ secrets.EC2_SECURITY_GROUP_ID }} \
+            --iam-instance-profile Name=${{ secrets.EC2_INSTANCE_PROFILE }} \
+            --user-data file://scripts/bootstrap-runner.sh \
+            --instance-initiated-shutdown-behavior terminate \
+            --tag-specifications \
+              "ResourceType=instance,Tags=[{Key=Name,Value=github-ec2-runner},{Key=ManagedBy,Value=github-actions}]" \
+            --metadata-options "HttpTokens=required,HttpEndpoint=enabled"

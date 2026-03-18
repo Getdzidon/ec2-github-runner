@@ -1,0 +1,23 @@
+name: CI — EC2 Self-Hosted Runner
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths-ignore:
+      - "README.md"
+      - "**.txt"
+
+jobs:
+  test:
+    name: Run on EC2 runner
+    runs-on: [self-hosted, ec2-runner, ubuntu]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify runner environment
+        run: |
+          echo "Running on: $(hostname)"
+          echo "OS: $(uname -a)"
+          aws --version

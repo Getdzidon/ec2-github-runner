@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:base"],
+  "packageRules": [
+    {
+      "matchManagers": ["regex"],
+      "matchPackageNames": ["actions/runner"],
+      "groupName": "GitHub Actions runner",
+      "automerge": false,
+      "labels": ["dependencies", "runner"]
+    }
+  ],
+  "regexManagers": [
+    {
+      "fileMatch": ["^versions\\.env$"],
+      "matchStrings": [
+        "RUNNER_VERSION=(?<currentValue>[\\d.]+)"
+      ],
+      "depNameTemplate": "actions/runner",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+*.pem
+*.key
+.env
+MY_NOTES.md
+MY_NOTES.txt
