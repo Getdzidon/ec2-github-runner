@@ -14,7 +14,7 @@ jobs:
     runs-on: [self-hosted, ec2-runner, ubuntu]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Verify runner environment
         run: |
