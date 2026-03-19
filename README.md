@@ -68,7 +68,7 @@ ec2-github-runner/
 
 ## ⚠️ Manual steps — do these first, in order
 
-These steps cannot be automated. Complete all of them before pushing to `main`.
+Complete all of them before pushing to `main`.
 
 ---
 
